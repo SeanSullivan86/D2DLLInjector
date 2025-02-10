@@ -9,10 +9,15 @@
 void exitAndReportWin32APIFailureIfConditionTrue(bool shouldExit, const char* errorDescription);
 uint32_t GetModuleAddressWithinProcess(DWORD processId, const char* targetModuleName);
 
+struct ParamsToPassToInjectedDLL {
+    uint32_t portNumber;
+    char logFile[100];
+};
 
 int main()
 {
-    char* pathToDllToInject = "C:\\Users\\sully\\source\\repos\\D2LootDropLooper\\Release\\D2LootDropLooper.dll";
+    char* pathToDllToInject = "C:\\Users\\12063\\source\\repos\\SeanSullivan86\\D2InjectedLootDropLooper\\Release\\D2LootDropLooper.dll";
+    //char* pathToDllToInject = "C:\\Users\\sully\\source\\repos\\D2LootDropLooper\\Release\\D2LootDropLooper.dll";
     PROCESSENTRY32 entry;
     entry.dwSize = sizeof(PROCESSENTRY32);
 
@@ -102,17 +107,20 @@ int main()
     printf("injectedDllAddressInOurProcess %i\n", injectedDllAddressInOurProcess);
 
     uint32_t functionAddressInOurProcess = (uint32_t)GetProcAddress(dllInjectedInOurProcess, "InitLootDropLooper");
-    uint32_t functionOffsetWithinDll = functionAddressInOurProcess - injectedDllAddressInOurProcess;
+    exitAndReportWin32APIFailureIfConditionTrue(functionAddressInOurProcess == NULL, "GetProcAddress for InitLootDropLooper failed");
 
+    uint32_t functionOffsetWithinDll = functionAddressInOurProcess - injectedDllAddressInOurProcess;
     uint32_t functionAddressInD2Process = injectedDllAddressInD2Process + functionOffsetWithinDll;
 
+    int gameIndex = 0;
+    ParamsToPassToInjectedDLL paramsToPassToInjectedDLL;
+    paramsToPassToInjectedDLL.portNumber = 5430 + gameIndex;
+    sprintf(paramsToPassToInjectedDLL.logFile, "C:\\Users\\12063\\D2Log-%i.log", gameIndex);
 
-    LPVOID remoteAddrToPassParams = (LPVOID)VirtualAllocEx(d2Process, NULL, strlen(pathToDllToInject), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    LPVOID remoteAddrToPassParams = (LPVOID)VirtualAllocEx(d2Process, NULL, sizeof(paramsToPassToInjectedDLL), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     exitAndReportWin32APIFailureIfConditionTrue(remoteAddrToPassParams == NULL, "Could not allocate memory in D2 process");
 
-
-    uint32_t paramToPassToInjectedDll = 1;
-    result = WriteProcessMemory(d2Process, remoteAddrToPassParams, &paramToPassToInjectedDll, sizeof(uint32_t), NULL);
+    result = WriteProcessMemory(d2Process, remoteAddrToPassParams, &paramsToPassToInjectedDLL, sizeof(paramsToPassToInjectedDLL), NULL);
     exitAndReportWin32APIFailureIfConditionTrue(result == FALSE, "Could not write to D2 process memory");
 
     threadId = CreateRemoteThread(d2Process, NULL, 0, (LPTHREAD_START_ROUTINE) functionAddressInD2Process, remoteAddrToPassParams, NULL, NULL);
